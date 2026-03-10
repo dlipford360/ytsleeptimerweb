@@ -534,9 +534,11 @@
       font-family: inherit;
       font-size: 0.9rem;
       cursor: pointer;
-      text-overflow: ellipsis;
       overflow: hidden;
-      white-space: nowrap;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-clamp: 2;
     }
     .history-item:hover {
       background: var(--surface-elevated);
@@ -668,20 +670,60 @@
     function getHistory() {
       try {
         const raw = localStorage.getItem(HISTORY_KEY);
-        return raw ? JSON.parse(raw) : [];
+        const parsed = raw ? JSON.parse(raw) : [];
+        return parsed.map((item) =>
+          typeof item === 'string' ? { url: item, title: null } : item
+        );
       } catch {
         return [];
       }
+    }
+
+    function saveHistory(history) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX)));
     }
 
     function addToHistory(url) {
       const trimmed = url.trim();
       if (!trimmed) return;
       let history = getHistory();
-      history = history.filter((u) => u !== trimmed);
-      history.unshift(trimmed);
-      history = history.slice(0, HISTORY_MAX);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      history = history.filter((h) => h.url !== trimmed);
+      history.unshift({ url: trimmed, title: null });
+      saveHistory(history);
+      fetchVideoTitle(trimmed).then((title) => {
+        if (title) {
+          history = getHistory();
+          const idx = history.findIndex((h) => h.url === trimmed);
+          if (idx >= 0) {
+            history[idx].title = title;
+            saveHistory(history);
+            if (document.getElementById('historyModal').classList.contains('visible')) {
+              renderHistory();
+            }
+          }
+        }
+      });
+    }
+
+    function fetchVideoTitle(url) {
+      const videoId = extractVideoId(url);
+      if (!videoId) return Promise.resolve(null);
+      const embedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      return new Promise((resolve) => {
+        const callbackName = 'ytTitle_' + Date.now();
+        window[callbackName] = (data) => {
+          delete window[callbackName];
+          script.remove();
+          resolve(data && data.title ? data.title : null);
+        };
+        const script = document.createElement('script');
+        script.src = `https://noembed.com/embed?url=${encodeURIComponent(embedUrl)}&callback=${callbackName}`;
+        script.onerror = () => {
+          delete window[callbackName];
+          resolve(null);
+        };
+        document.body.appendChild(script);
+      });
     }
 
     function clearHistory() {
@@ -765,8 +807,14 @@
         }
         await createPlayer(videoId);
         document.getElementById('playerSection').classList.remove('hidden');
-        document.getElementById('nowPlaying').innerHTML = `<strong>Now playing:</strong> https://youtube.com/watch?v=${videoId}`;
+        document.getElementById('nowPlaying').innerHTML = `<strong>Now playing:</strong> Loading...`;
         addToHistory(input.value);
+        fetchVideoTitle(input.value).then((title) => {
+          const nowEl = document.getElementById('nowPlaying');
+          if (nowEl) {
+            nowEl.innerHTML = `<strong>Now playing:</strong> ${title || `https://youtube.com/watch?v=${videoId}`}`;
+          }
+        });
       } catch (err) {
         setError('Failed to load video. Please check the URL.');
       } finally {
@@ -920,18 +968,36 @@
         historyList.innerHTML = '<p class="history-empty">No history yet. Play a video to add it here.</p>';
         return;
       }
-      history.forEach((url) => {
+      history.forEach((item, idx) => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'history-item';
-        btn.textContent = url;
-        btn.title = url;
+        btn.textContent = item.title || item.url;
+        btn.title = item.url;
         btn.addEventListener('click', () => {
           closeHistoryModal();
-          document.getElementById('urlInput').value = url;
+          document.getElementById('urlInput').value = item.url;
           document.getElementById('playBtn').click();
         });
         historyList.appendChild(btn);
+      });
+      const missingTitles = history.filter((h) => !h.title).slice(0, 5);
+      missingTitles.forEach((item, i) => {
+        setTimeout(() => {
+          fetchVideoTitle(item.url).then((title) => {
+            if (title) {
+              const h = getHistory();
+              const idx = h.findIndex((x) => x.url === item.url);
+              if (idx >= 0) {
+                h[idx].title = title;
+                saveHistory(h);
+                if (document.getElementById('historyModal').classList.contains('visible')) {
+                  renderHistory();
+                }
+              }
+            }
+          });
+        }, i * 300);
       });
     }
 
