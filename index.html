@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Sleep Web</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --surface: #16161a;
+      --surface-elevated: #1e1e24;
+      --text: #e8e6e3;
+      --text-muted: #8b8685;
+      --accent: #6b2525;
+      --accent-dim: rgba(107, 37, 37, 0.3);
+      --border: #2a2a30;
+      --error: #c75c5c;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-dim), transparent),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(107, 37, 37, 0.08), transparent);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    h1 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 2.5rem;
+      font-weight: 400;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 2.5rem;
+      font-weight: 400;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      font-size: 1rem;
+      font-family: inherit;
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]::placeholder {
+      color: var(--text-muted);
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    button {
+      background: var(--accent);
+      color: #f5f0eb;
+      border: none;
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .error {
+      color: var(--error);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      min-height: 1.4em;
+    }
+
+    .player-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .player-section.hidden {
+      display: none;
+    }
+
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%;
+      background: #000;
+    }
+
+    #player {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .controls button {
+      background: transparent;
+      color: var(--text);
+      padding: 0.5rem;
+    }
+
+    .controls button.primary {
+      background: var(--accent) !important;
+      color: #f5f0eb !important;
+      padding: 0.6rem 1rem;
+    }
+
+    .now-playing {
+      flex: 1;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .now-playing strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .sleep-timer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .sleep-timer h2 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 1.25rem;
+      font-weight: 400;
+      margin-bottom: 1rem;
+      color: var(--text-muted);
+    }
+
+    .sleep-timer-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .sleep-timer input[type="number"] {
+      width: 5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      font-family: inherit;
+      color: var(--text);
+    }
+
+    .sleep-timer input[type="number"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .sleep-timer .timer-status {
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: var(--accent);
+      margin-top: 0.5rem;
+    }
+
+    .sleep-timer .timer-status.cancelled {
+      font-weight: normal;
+      color: var(--text-muted);
+    }
+
+    .sleep-timer button.secondary {
+      background: transparent;
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+    }
+
+    .sleep-timer button.secondary:hover {
+      color: var(--text);
+    }
+
+    .sleep-timer-presets {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .sleep-timer-presets button {
+      background: var(--surface-elevated);
+      color: var(--text);
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+    }
+
+    .sleep-timer-presets button:hover {
+      background: var(--border);
+    }
+
+    .dim-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+
+    .dim-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .break-line {
+      width: 100%;
+      margin: 2rem 0;
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .black-box {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 200px;
+    }
+
+    .black-box.fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      border-radius: 0;
+      min-height: 100vh;
+    }
+
+    .black-box.fullscreen .player-wrapper {
+      height: 100%;
+      padding-top: 0;
+    }
+
+    .black-box.fullscreen #player {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .fullscreen-btn {
+      display: none;
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.6);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .black-box.fullscreen .fullscreen-btn {
+      display: block;
+    }
+
+    .fullscreen-btn:hover {
+      opacity: 0.9;
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .fullscreen-prompt {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: color 0.2s;
+    }
+
+    .fullscreen-prompt:hover {
+      color: var(--accent);
+    }
+
+    .fullscreen-black-total {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 10000;
+      cursor: pointer;
+    }
+
+    .fullscreen-black-total.active {
+      display: block;
+    }
+
+    .fullscreen-black-total:fullscreen {
+      display: block;
+    }
+
+    .fullscreen-prompt-total {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: color 0.2s;
+    }
+
+    .fullscreen-prompt-total:hover {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="dim-overlay" id="dimOverlay" aria-hidden="true"></div>
+  <div class="container">
+    <h2>YT Sleep Timer</h2>
+    <p class="subtitle">Paste a YouTube URL to stream</p>
+
+    <div class="input-group">
+      <input
+        type="text"
+        id="urlInput"
+        placeholder="https://youtube.com/watch?v=..."
+        autocomplete="off"
+      >
+      <button type="button" id="playBtn">Play</button>
+    </div>
+
+    <p class="error" id="error" aria-live="polite"></p>
+
+    <div class="black-box" id="blackBox">
+      <button type="button" class="fullscreen-btn" id="fullscreenBtn" title="Exit fullscreen" aria-label="Exit fullscreen">✕</button>
+      <div class="player-section hidden" id="playerSection">
+        <div class="player-wrapper">
+          <div id="player"></div>
+        </div>
+        <div class="controls">
+        <button id="playPauseBtn" class="primary" title="Play / Pause">▶</button>
+        <button id="muteBtn" title="Mute / Unmute">🔊</button>
+        <span class="now-playing" id="nowPlaying">—</span>
+      </div>
+    </div>
+    </div>
+
+    <div class="sleep-timer">
+      <h2>Sleep Timer</h2>
+      <div class="sleep-timer-presets">
+        <button type="button" data-minutes="10">10 min</button>
+        <button type="button" data-minutes="30">30 min</button>
+        <button type="button" data-minutes="60">60 min</button>
+      </div>
+      <div class="sleep-timer-row">
+        <input type="number" id="timerMinutes" min="1" max="480" placeholder="30" value="30">
+        <span style="color: var(--text-muted);">minutes</span>
+        <button type="button" id="setTimerBtn">Set</button>
+        <button type="button" id="cancelTimerBtn" class="secondary" style="display: none;">Cancel</button>
+      </div>
+      <p class="timer-status" id="timerStatus" aria-live="polite"></p>
+    </div>
+
+    <hr class="break-line">
+
+    <p class="fullscreen-prompt" id="fullscreenPrompt">Click here to go fullscreen black</p>
+    <p class="fullscreen-prompt-total" id="fullscreenPromptTotal">Click here for fullscreen black (hide everything)</p>
+  </div>
+
+  <div class="fullscreen-black-total" id="fullscreenBlackTotal" title="Click to exit"></div>
+
+  <script>
+    const YT_URL_PATTERNS = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+      /^([a-zA-Z0-9_-]{11})$/
+    ];
+
+    function extractVideoId(input) {
+      const trimmed = input.trim();
+      for (const pattern of YT_URL_PATTERNS) {
+        const match = trimmed.match(pattern);
+        if (match) return match[1];
+      }
+      return null;
+    }
+
+    function setError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg || '';
+    }
+
+    let player = null;
+    let isMuted = false;
+    let sleepTimerInterval = null;
+
+    function onYouTubeIframeAPIReady() {
+      // API loads via script tag; player created when user submits URL
+    }
+
+    function onPlayerStateChange(e) {
+      const btn = document.getElementById('playPauseBtn');
+      btn.textContent = e.data === YT.PlayerState.PLAYING ? '⏸' : '▶';
+    }
+
+    function createPlayer(videoId) {
+      return new Promise((resolve) => {
+        if (player) {
+          player.destroy();
+        }
+        player = new YT.Player('player', {
+          videoId,
+          playerVars: {
+            autoplay: 1,
+            modestbranding: 1,
+            rel: 0,
+            showinfo: 0
+          },
+          events: {
+            onReady: (e) => {
+              const p = e.target;
+              document.getElementById('playPauseBtn').textContent =
+                p.getPlayerState() === YT.PlayerState.PLAYING ? '⏸' : '▶';
+              resolve(p);
+            },
+            onStateChange: onPlayerStateChange
+          }
+        });
+      });
+    }
+
+    document.getElementById('playBtn').addEventListener('click', async () => {
+      const input = document.getElementById('urlInput');
+      const videoId = extractVideoId(input.value);
+      setError('');
+
+      if (!videoId) {
+        setError('Please enter a valid YouTube URL or video ID');
+        return;
+      }
+
+      const playBtn = document.getElementById('playBtn');
+      playBtn.disabled = true;
+
+      try {
+        if (typeof YT === 'undefined' || !YT.Player) {
+          await loadYouTubeAPI();
+        }
+        await createPlayer(videoId);
+        document.getElementById('playerSection').classList.remove('hidden');
+        document.getElementById('nowPlaying').innerHTML = `<strong>Now playing:</strong> https://youtube.com/watch?v=${videoId}`;
+      } catch (err) {
+        setError('Failed to load video. Please check the URL.');
+      } finally {
+        playBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('urlInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('playBtn').click();
+      }
+    });
+
+    document.getElementById('playPauseBtn').addEventListener('click', () => {
+      if (!player) return;
+      const state = player.getPlayerState();
+      if (state === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+        document.getElementById('playPauseBtn').textContent = '▶';
+      } else {
+        player.playVideo();
+        document.getElementById('playPauseBtn').textContent = '⏸';
+      }
+    });
+
+    document.getElementById('muteBtn').addEventListener('click', () => {
+      if (!player) return;
+      isMuted = !isMuted;
+      if (isMuted) player.mute();
+      else player.unMute();
+      document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🔊';
+    });
+
+    function clearSleepTimer() {
+      if (sleepTimerInterval) {
+        clearInterval(sleepTimerInterval);
+        sleepTimerInterval = null;
+      }
+      document.getElementById('cancelTimerBtn').style.display = 'none';
+      document.getElementById('timerStatus').textContent = '';
+      document.getElementById('timerStatus').classList.remove('cancelled');
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function startSleepTimer(minutes) {
+      if (minutes < 1 || minutes > 480) {
+        setError('Enter a valid time (1–480 minutes)');
+        return;
+      }
+      setError('');
+
+      clearSleepTimer();
+      let remainingSeconds = minutes * 60;
+      const statusEl = document.getElementById('timerStatus');
+      const cancelBtn = document.getElementById('cancelTimerBtn');
+
+      statusEl.textContent = `Stopping in ${formatTime(remainingSeconds)}`;
+      statusEl.classList.remove('cancelled');
+      cancelBtn.style.display = 'inline-block';
+
+      sleepTimerInterval = setInterval(() => {
+        remainingSeconds--;
+        statusEl.textContent = `Stopping in ${formatTime(remainingSeconds)}`;
+        if (remainingSeconds <= 0) {
+          clearSleepTimer();
+          if (player && typeof player.pauseVideo === 'function') {
+            player.pauseVideo();
+          }
+          statusEl.textContent = 'Playback stopped';
+          statusEl.classList.add('cancelled');
+          setTimeout(() => { statusEl.textContent = ''; }, 3000);
+          document.getElementById('dimOverlay').classList.add('visible');
+          document.getElementById('dimOverlay').setAttribute('aria-hidden', 'false');
+        }
+      }, 1000);
+    }
+
+    document.getElementById('setTimerBtn').addEventListener('click', () => {
+      const input = document.getElementById('timerMinutes');
+      const minutes = parseInt(input.value, 10);
+      if (isNaN(minutes)) {
+        setError('Enter a valid time (1–480 minutes)');
+        return;
+      }
+      startSleepTimer(minutes);
+    });
+
+    document.querySelectorAll('.sleep-timer-presets button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const minutes = parseInt(btn.dataset.minutes, 10);
+        document.getElementById('timerMinutes').value = minutes;
+        startSleepTimer(minutes);
+      });
+    });
+
+    document.getElementById('cancelTimerBtn').addEventListener('click', () => {
+      clearSleepTimer();
+      document.getElementById('timerStatus').textContent = 'Timer cancelled';
+      document.getElementById('timerStatus').classList.add('cancelled');
+      setTimeout(() => {
+        document.getElementById('timerStatus').textContent = '';
+      }, 2000);
+    });
+
+    function loadYouTubeAPI() {
+      return new Promise((resolve) => {
+        if (window.YT && window.YT.Player) {
+          resolve();
+          return;
+        }
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const firstScript = document.getElementsByTagName('script')[0];
+        firstScript.parentNode.insertBefore(tag, firstScript);
+        window.onYouTubeIframeAPIReady = () => {
+          resolve();
+        };
+      });
+    }
+
+    const dimOverlay = document.getElementById('dimOverlay');
+    function undim() {
+      dimOverlay.classList.remove('visible');
+      dimOverlay.setAttribute('aria-hidden', 'true');
+    }
+    dimOverlay.addEventListener('click', undim);
+    document.addEventListener('mousemove', (e) => {
+      if (dimOverlay.classList.contains('visible')) undim();
+    });
+
+    const blackBox = document.getElementById('blackBox');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        blackBox.requestFullscreen().then(() => {
+          blackBox.classList.add('fullscreen');
+        }).catch(() => {
+          blackBox.classList.add('fullscreen');
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        blackBox.classList.remove('fullscreen');
+      }
+    });
+
+    document.getElementById('fullscreenPrompt').addEventListener('click', () => {
+      fullscreenBtn.click();
+    });
+
+    const fullscreenBlackTotal = document.getElementById('fullscreenBlackTotal');
+    document.getElementById('fullscreenPromptTotal').addEventListener('click', () => {
+      fullscreenBlackTotal.classList.add('active');
+      fullscreenBlackTotal.requestFullscreen().catch(() => {
+        fullscreenBlackTotal.classList.add('active');
+      });
+    });
+    fullscreenBlackTotal.addEventListener('click', () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+      fullscreenBlackTotal.classList.remove('active');
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && fullscreenBlackTotal.classList.contains('active')) {
+        fullscreenBlackTotal.classList.remove('active');
+      }
+    });
+
+    function getVideoIdFromUrl() {
+      const qs = new URLSearchParams(window.location.search);
+      const fromSearch = qs.get('v');
+      if (fromSearch) return fromSearch;
+      if (window.location.hash) {
+        const hashQuery = window.location.hash.slice(1).split('?')[1] || '';
+        return new URLSearchParams(hashQuery).get('v');
+      }
+      return null;
+    }
+
+    async function initFromUrl() {
+      const videoId = getVideoIdFromUrl();
+      if (!videoId) return;
+      const input = document.getElementById('urlInput');
+      input.value = `https://www.youtube.com/watch?v=${videoId}`;
+      document.getElementById('playBtn').click();
+    }
+
+    // Preload API on page load, then check URL for video
+    loadYouTubeAPI().then(initFromUrl);
+  </script>
+</body>
+</html>

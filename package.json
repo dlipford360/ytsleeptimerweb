@@ -1,0 +1,9 @@
+{
+  "name": "yt-sleep-timer-web",
+  "version": "1.0.0",
+  "description": "Web frontend to play YouTube from a URL with a sleep timer",
+  "scripts": {
+    "start": "npx serve . -l 3000 -s",
+    "dev": "npx serve . -l 3000 -s"
+  }
+}
