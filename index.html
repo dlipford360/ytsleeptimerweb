@@ -397,6 +397,11 @@
     .nav-link .nav-link-btn:hover {
       color: var(--accent);
     }
+    .nav-separator {
+      color: var(--text-muted);
+      opacity: 0.5;
+      font-size: 0.8rem;
+    }
 
     .about-modal-overlay {
       display: none;
@@ -465,12 +470,109 @@
       font-size: 0.9rem;
     }
     .about-modal .github-link:hover { opacity: 0.9; }
+
+    .history-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 9997;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      overflow-y: auto;
+    }
+    .history-modal-overlay.visible {
+      display: flex;
+    }
+    .history-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 80vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .history-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-modal h1 {
+      font-size: 1.25rem;
+      margin: 0;
+    }
+    .history-modal-close {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: 0.25rem;
+    }
+    .history-modal-close:hover { color: var(--text); }
+    .history-modal-list {
+      overflow-y: auto;
+      padding: 0.5rem;
+      flex: 1;
+    }
+    .history-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.25rem;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .history-item:hover {
+      background: var(--surface-elevated);
+      color: var(--accent);
+    }
+    .history-empty {
+      color: var(--text-muted);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    .history-modal-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .history-clear-btn {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .history-clear-btn:hover {
+      color: var(--error);
+      border-color: var(--error);
+    }
   </style>
 </head>
 <body>
   <div class="dim-overlay" id="dimOverlay" aria-hidden="true"></div>
   <div class="container">
-    <nav class="nav-link">
+    <nav class="nav-link" style="display: flex; align-items: center; gap: 1rem;">
+      <button type="button" id="historyBtn" class="nav-link-btn">History</button>
+      <span class="nav-separator">|</span>
       <button type="button" id="aboutBtn" class="nav-link-btn">About</button>
     </nav>
     <h2>YT Sleep Timer</h2>
@@ -546,7 +648,46 @@
     </div>
   </div>
 
+  <div class="history-modal-overlay" id="historyModal" aria-hidden="true">
+    <div class="history-modal" role="dialog" aria-labelledby="historyModalTitle">
+      <div class="history-modal-header">
+        <h1 id="historyModalTitle">History</h1>
+        <button type="button" class="history-modal-close" id="historyModalClose" aria-label="Close">✕</button>
+      </div>
+      <div class="history-modal-list" id="historyList"></div>
+      <div class="history-modal-footer">
+        <button type="button" class="history-clear-btn" id="historyClearBtn">Clear history</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const HISTORY_KEY = 'yt-sleep-history';
+    const HISTORY_MAX = 50;
+
+    function getHistory() {
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function addToHistory(url) {
+      const trimmed = url.trim();
+      if (!trimmed) return;
+      let history = getHistory();
+      history = history.filter((u) => u !== trimmed);
+      history.unshift(trimmed);
+      history = history.slice(0, HISTORY_MAX);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    }
+
+    function clearHistory() {
+      localStorage.removeItem(HISTORY_KEY);
+    }
+
     const YT_URL_PATTERNS = [
       /(?:youtube\.com\/watch\?v=|youtube\.com\/live\/|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
       /^([a-zA-Z0-9_-]{11})$/
@@ -625,6 +766,7 @@
         await createPlayer(videoId);
         document.getElementById('playerSection').classList.remove('hidden');
         document.getElementById('nowPlaying').innerHTML = `<strong>Now playing:</strong> https://youtube.com/watch?v=${videoId}`;
+        addToHistory(input.value);
       } catch (err) {
         setError('Failed to load video. Please check the URL.');
       } finally {
@@ -765,6 +907,53 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && aboutModal.classList.contains('visible')) closeAboutModal();
+      if (e.key === 'Escape' && historyModal.classList.contains('visible')) closeHistoryModal();
+    });
+
+    const historyModal = document.getElementById('historyModal');
+    const historyList = document.getElementById('historyList');
+
+    function renderHistory() {
+      const history = getHistory();
+      historyList.innerHTML = '';
+      if (history.length === 0) {
+        historyList.innerHTML = '<p class="history-empty">No history yet. Play a video to add it here.</p>';
+        return;
+      }
+      history.forEach((url) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'history-item';
+        btn.textContent = url;
+        btn.title = url;
+        btn.addEventListener('click', () => {
+          closeHistoryModal();
+          document.getElementById('urlInput').value = url;
+          document.getElementById('playBtn').click();
+        });
+        historyList.appendChild(btn);
+      });
+    }
+
+    function openHistoryModal() {
+      renderHistory();
+      historyModal.classList.add('visible');
+      historyModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeHistoryModal() {
+      historyModal.classList.remove('visible');
+      historyModal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
+    document.getElementById('historyModalClose').addEventListener('click', closeHistoryModal);
+    historyModal.addEventListener('click', (e) => {
+      if (e.target === historyModal) closeHistoryModal();
+    });
+    document.getElementById('historyClearBtn').addEventListener('click', () => {
+      clearHistory();
+      renderHistory();
     });
 
     const dimOverlay = document.getElementById('dimOverlay');
