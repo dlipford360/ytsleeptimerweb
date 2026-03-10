@@ -2,6 +2,8 @@
 
 A web frontend that plays YouTube from a URL, with a built-in sleep timer and screen dimming.
 
+**Try it:** [https://ytsleeptimer.com/](https://ytsleeptimer.com/)
+
 ## Why This Exists
 
 YouTube's own sleep timer is not always available. For example:
