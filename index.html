@@ -480,7 +480,7 @@
       <input
         type="text"
         id="urlInput"
-        placeholder="https://youtube.com/watch?v=..."
+        placeholder="YouTube URL or video ID (watch, live, youtu.be...)"
         autocomplete="off"
       >
       <button type="button" id="playBtn">Play</button>
@@ -548,7 +548,7 @@
 
   <script>
     const YT_URL_PATTERNS = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+      /(?:youtube\.com\/watch\?v=|youtube\.com\/live\/|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
       /^([a-zA-Z0-9_-]{11})$/
     ];
 
@@ -823,6 +823,8 @@
       const qs = new URLSearchParams(window.location.search);
       const fromSearch = qs.get('v');
       if (fromSearch) return fromSearch;
+      const liveMatch = window.location.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})\/?$/);
+      if (liveMatch) return liveMatch[1];
       if (window.location.hash) {
         const hashQuery = window.location.hash.slice(1).split('?')[1] || '';
         return new URLSearchParams(hashQuery).get('v');
