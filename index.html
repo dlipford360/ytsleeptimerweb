@@ -152,6 +152,25 @@
       height: 100%;
     }
 
+    .twitch-pause-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      cursor: pointer;
+    }
+    .twitch-pause-overlay.visible {
+      display: flex;
+    }
+    .twitch-pause-overlay .pause-icon {
+      font-size: 8rem;
+      color: var(--text-muted);
+      opacity: 0.8;
+    }
+
     .controls {
       display: flex;
       align-items: center;
@@ -578,13 +597,13 @@
       <button type="button" id="aboutBtn" class="nav-link-btn">About</button>
     </nav>
     <h2>YT Sleep Timer</h2>
-    <p class="subtitle">Paste a YouTube URL to stream</p>
+    <p class="subtitle">Paste a YouTube or Twitch URL to stream</p>
 
     <div class="input-group">
       <input
         type="text"
         id="urlInput"
-        placeholder="YouTube URL or video ID (watch, live, youtu.be...)"
+        placeholder="YouTube or Twitch URL (watch, live, youtu.be, twitch.tv/...)"
         autocomplete="off"
       >
       <button type="button" id="playBtn">Play</button>
@@ -597,6 +616,9 @@
       <div class="player-section hidden" id="playerSection">
         <div class="player-wrapper">
           <div id="player"></div>
+          <div class="twitch-pause-overlay" id="twitchPauseOverlay" title="Click to resume">
+            <span class="pause-icon" aria-hidden="true">⏸</span>
+          </div>
         </div>
         <div class="controls">
         <button id="playPauseBtn" class="primary" title="Play / Pause">▶</button>
@@ -706,11 +728,15 @@
     }
 
     function fetchVideoTitle(url) {
-      const videoId = extractVideoId(url);
-      if (!videoId) return Promise.resolve(null);
-      const embedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      const parsed = parseMediaUrl(url);
+      if (!parsed) return Promise.resolve(null);
+      const embedUrl = parsed.type === 'youtube'
+        ? `https://www.youtube.com/watch?v=${parsed.videoId}`
+        : parsed.type === 'twitch'
+          ? (parsed.channel ? `https://twitch.tv/${parsed.channel}` : parsed.video ? `https://twitch.tv/videos/${parsed.video}` : `https://clips.twitch.tv/${parsed.clip}`)
+          : url;
       return new Promise((resolve) => {
-        const callbackName = 'ytTitle_' + Date.now();
+        const callbackName = 'mediaTitle_' + Date.now();
         window[callbackName] = (data) => {
           delete window[callbackName];
           script.remove();
@@ -735,6 +761,12 @@
       /^([a-zA-Z0-9_-]{11})$/
     ];
 
+    const TWITCH_URL_PATTERNS = {
+      channel: /(?:twitch\.tv\/)([a-zA-Z0-9_]{4,25})(?:\/|\?|$)/,
+      video: /twitch\.tv\/videos\/(\d+)/,
+      clip: /(?:clips\.twitch\.tv\/|twitch\.tv\/[^/]+\/clip\/)([a-zA-Z0-9_-]+)/
+    };
+
     function extractVideoId(input) {
       const trimmed = input.trim();
       for (const pattern of YT_URL_PATTERNS) {
@@ -744,13 +776,31 @@
       return null;
     }
 
+    function parseMediaUrl(input) {
+      const trimmed = input.trim();
+      for (const pattern of YT_URL_PATTERNS) {
+        const match = trimmed.match(pattern);
+        if (match) return { type: 'youtube', videoId: match[1] };
+      }
+      const clipMatch = trimmed.match(TWITCH_URL_PATTERNS.clip);
+      if (clipMatch) return { type: 'twitch', clip: clipMatch[1] };
+      const videoMatch = trimmed.match(TWITCH_URL_PATTERNS.video);
+      if (videoMatch) return { type: 'twitch', video: videoMatch[1] };
+      const channelMatch = trimmed.match(TWITCH_URL_PATTERNS.channel);
+      if (channelMatch) return { type: 'twitch', channel: channelMatch[1] };
+      return null;
+    }
+
     function setError(msg) {
       const el = document.getElementById('error');
       el.textContent = msg || '';
     }
 
     let player = null;
+    let currentMediaType = null;
+    let currentParsed = null;
     let isMuted = false;
+    let twitchPausedOverlayVisible = false;
     let sleepTimerInterval = null;
 
     function onYouTubeIframeAPIReady() {
@@ -762,11 +812,18 @@
       btn.textContent = e.data === YT.PlayerState.PLAYING ? '⏸' : '▶';
     }
 
-    function createPlayer(videoId) {
+    function createYouTubePlayer(videoId) {
       return new Promise((resolve) => {
-        if (player) {
+        if (player && currentMediaType === 'youtube') {
           player.destroy();
         }
+        if (currentMediaType === 'twitch') {
+          document.getElementById('player').innerHTML = '';
+          twitchPausedOverlayVisible = false;
+          document.getElementById('twitchPauseOverlay').classList.remove('visible');
+        }
+        currentMediaType = 'youtube';
+        currentParsed = { type: 'youtube', videoId };
         player = new YT.Player('player', {
           videoId,
           playerVars: {
@@ -788,13 +845,83 @@
       });
     }
 
+    function loadTwitchEmbedAPI() {
+      return new Promise((resolve) => {
+        if (window.Twitch && window.Twitch.Player) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://player.twitch.tv/js/embed/v1.js';
+        script.onload = () => resolve();
+        script.onerror = () => { throw new Error('Failed to load Twitch embed'); };
+        document.body.appendChild(script);
+      });
+    }
+
+    function createTwitchPlayer(parsed) {
+      return new Promise((resolve) => {
+        const container = document.getElementById('player');
+        container.innerHTML = '';
+        currentMediaType = 'twitch';
+        currentParsed = parsed;
+        twitchPausedOverlayVisible = false;
+        document.getElementById('twitchPauseOverlay').classList.remove('visible');
+        const parent = [window.location.hostname || 'localhost'];
+        const options = {
+          width: '100%',
+          height: '100%',
+          parent,
+          autoplay: true,
+          muted: isMuted
+        };
+        if (parsed.channel) {
+          options.channel = parsed.channel;
+        } else if (parsed.video) {
+          options.video = 'v' + parsed.video;
+        } else if (parsed.clip) {
+          const iframe = document.createElement('iframe');
+          iframe.src = `https://clips.twitch.tv/embed?clip=${parsed.clip}&parent=${parent[0]}&autoplay=true&muted=${isMuted}`;
+          iframe.setAttribute('allowfullscreen', '');
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          container.appendChild(iframe);
+          const clipId = parsed.clip;
+          player = {
+            _isClip: true,
+            pause: () => { container.innerHTML = ''; document.getElementById('playPauseBtn').textContent = '▶'; },
+            play: () => {
+              const iframe = document.createElement('iframe');
+              iframe.src = `https://clips.twitch.tv/embed?clip=${clipId}&parent=${parent[0]}&autoplay=true&muted=${isMuted}`;
+              iframe.setAttribute('allowfullscreen', '');
+              iframe.style.width = '100%';
+              iframe.style.height = '100%';
+              iframe.style.border = 'none';
+              container.appendChild(iframe);
+              document.getElementById('playPauseBtn').textContent = '⏸';
+            },
+            setMuted: () => {}
+          };
+          document.getElementById('playPauseBtn').textContent = '⏸';
+          resolve(player);
+          return;
+        }
+        player = new Twitch.Player('player', options);
+        player.addEventListener(Twitch.Player.READY, () => {
+          document.getElementById('playPauseBtn').textContent = '⏸';
+          resolve(player);
+        });
+      });
+    }
+
     document.getElementById('playBtn').addEventListener('click', async () => {
       const input = document.getElementById('urlInput');
-      const videoId = extractVideoId(input.value);
+      const parsed = parseMediaUrl(input.value);
       setError('');
 
-      if (!videoId) {
-        setError('Please enter a valid YouTube URL or video ID');
+      if (!parsed) {
+        setError('Please enter a valid YouTube or Twitch URL');
         return;
       }
 
@@ -802,17 +929,25 @@
       playBtn.disabled = true;
 
       try {
-        if (typeof YT === 'undefined' || !YT.Player) {
-          await loadYouTubeAPI();
+        if (parsed.type === 'youtube') {
+          if (typeof YT === 'undefined' || !YT.Player) {
+            await loadYouTubeAPI();
+          }
+          await createYouTubePlayer(parsed.videoId);
+        } else {
+          await loadTwitchEmbedAPI();
+          await createTwitchPlayer(parsed);
         }
-        await createPlayer(videoId);
         document.getElementById('playerSection').classList.remove('hidden');
         document.getElementById('nowPlaying').innerHTML = `<strong>Now playing:</strong> Loading...`;
         addToHistory(input.value);
+        const displayUrl = parsed.type === 'youtube'
+          ? `https://youtube.com/watch?v=${parsed.videoId}`
+          : parsed.channel ? `https://twitch.tv/${parsed.channel}` : parsed.video ? `https://twitch.tv/videos/${parsed.video}` : `https://clips.twitch.tv/${parsed.clip}`;
         fetchVideoTitle(input.value).then((title) => {
           const nowEl = document.getElementById('nowPlaying');
           if (nowEl) {
-            nowEl.innerHTML = `<strong>Now playing:</strong> ${title || `https://youtube.com/watch?v=${videoId}`}`;
+            nowEl.innerHTML = `<strong>Now playing:</strong> ${title || displayUrl}`;
           }
         });
       } catch (err) {
@@ -830,21 +965,41 @@
 
     document.getElementById('playPauseBtn').addEventListener('click', () => {
       if (!player) return;
-      const state = player.getPlayerState();
-      if (state === YT.PlayerState.PLAYING) {
-        player.pauseVideo();
-        document.getElementById('playPauseBtn').textContent = '▶';
-      } else {
-        player.playVideo();
-        document.getElementById('playPauseBtn').textContent = '⏸';
+      if (currentMediaType === 'youtube') {
+        const state = player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+          player.pauseVideo();
+          document.getElementById('playPauseBtn').textContent = '▶';
+        } else {
+          player.playVideo();
+          document.getElementById('playPauseBtn').textContent = '⏸';
+        }
+      } else if (currentMediaType === 'twitch') {
+        twitchPausedOverlayVisible = !twitchPausedOverlayVisible;
+        const overlay = document.getElementById('twitchPauseOverlay');
+        overlay.classList.toggle('visible', twitchPausedOverlayVisible);
+        document.getElementById('playPauseBtn').textContent = twitchPausedOverlayVisible ? '▶' : '⏸';
+        if (!player._isClip) {
+          player.setMuted(twitchPausedOverlayVisible || isMuted);
+        }
+      }
+    });
+
+    document.getElementById('twitchPauseOverlay').addEventListener('click', () => {
+      if (currentMediaType === 'twitch' && twitchPausedOverlayVisible) {
+        document.getElementById('playPauseBtn').click();
       }
     });
 
     document.getElementById('muteBtn').addEventListener('click', () => {
       if (!player) return;
       isMuted = !isMuted;
-      if (isMuted) player.mute();
-      else player.unMute();
+      if (currentMediaType === 'youtube') {
+        if (isMuted) player.mute();
+        else player.unMute();
+      } else if (!player._isClip) {
+        player.setMuted(twitchPausedOverlayVisible || isMuted);
+      }
       document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🔊';
     });
 
@@ -885,8 +1040,15 @@
         statusEl.textContent = `Stopping in ${formatTime(remainingSeconds)}`;
         if (remainingSeconds <= 0) {
           clearSleepTimer();
-          if (player && typeof player.pauseVideo === 'function') {
-            player.pauseVideo();
+          if (player) {
+            if (currentMediaType === 'youtube' && typeof player.pauseVideo === 'function') {
+              player.pauseVideo();
+            } else if (currentMediaType === 'twitch') {
+              twitchPausedOverlayVisible = true;
+              document.getElementById('twitchPauseOverlay').classList.add('visible');
+              document.getElementById('playPauseBtn').textContent = '▶';
+              if (!player._isClip) player.setMuted(true);
+            }
           }
           statusEl.textContent = 'Playback stopped';
           statusEl.classList.add('cancelled');
